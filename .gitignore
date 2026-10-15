@@ -1,0 +1,15 @@
+# 构建产物与临时文件
+build/
+logs/
+state/
+__pycache__/
+*.pyc
+
+# 由 install.sh 从上游克隆的源码（不纳入版本管理）
+vendor/miraclecast/
+
+# Miracast 运行时的粘贴目标
+.last_target
+
+# miracle-sinkctl 以 root 运行时会在当前目录留下配对历史
+.miracle-sink.history
