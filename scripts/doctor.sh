@@ -6,8 +6,10 @@
 # ============================================================================
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(dirname "$HERE")"
+# 解析符号链接，兼容「系统安装 + /usr/bin 软链」的调用方式
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+ROOT="${HARMONY_MIRROR_ROOT:-$(dirname "$HERE")}"
 PREFIX="${PREFIX:-$HOME/.local}"
 HDC="${HDC_BIN:-$ROOT/vendor/openharmony-toolchains/hdc}"
 
@@ -67,10 +69,14 @@ else
     warn "NetworkManager 没有 P2P 设备（可能是 iwd，方案 B 不支持）"
 fi
 # MiracleCast
-if [ -x "$PREFIX/bin/miracle-wifid" ] && [ -x "$PREFIX/bin/miracle-sinkctl" ]; then
-    ok "MiracleCast 已安装：$PREFIX/bin"
+MIRACLE_DIR=""
+for d in "$PREFIX/bin" "$ROOT/bin" "/usr/lib/harmony-mirror/bin" "/usr/local/bin"; do
+    if [ -x "$d/miracle-wifid" ] && [ -x "$d/miracle-sinkctl" ]; then MIRACLE_DIR="$d"; break; fi
+done
+if [ -n "$MIRACLE_DIR" ]; then
+    ok "MiracleCast 已安装：$MIRACLE_DIR"
 else
-    warn "MiracleCast 未安装（跑 ./install.sh）"
+    warn "MiracleCast 未安装（deb 安装：sudo apt install ./harmony-mirror_*.deb；源码安装：./install.sh）"
 fi
 [ -f /etc/dbus-1/system.d/org.freedesktop.miracle.conf ] \
     && ok "D-Bus 策略已就位" || warn "D-Bus 策略未安装（install.sh 会处理）"
@@ -98,7 +104,7 @@ hdr "结论"
 if [ -x "$HDC" ]; then
     echo "  • 想「能用鼠标键盘操作手机」→ ./scripts/start-hdc-mirror.sh"
 fi
-if [ -x "$PREFIX/bin/miracle-sinkctl" ]; then
+if [ -n "$MIRACLE_DIR" ]; then
     echo "  • 想「高清流畅看画面（含声音）」→ ./scripts/run-miracast-sink.sh"
 else
     echo "  • 想用「高清流畅投屏」→ 先跑 ./install.sh"

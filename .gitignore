@@ -1,5 +1,6 @@
 # 构建产物与临时文件
 build/
+dist/
 logs/
 state/
 __pycache__/

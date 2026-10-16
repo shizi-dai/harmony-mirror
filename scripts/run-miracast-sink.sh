@@ -17,10 +17,24 @@
 # ============================================================================
 set -uo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(dirname "$HERE")"
+# 解析符号链接，兼容「系统安装 + /usr/bin 软链」的调用方式
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+ROOT="${HARMONY_MIRROR_ROOT:-$(dirname "$HERE")}"
 PREFIX="${PREFIX:-$HOME/.local}"
-export PATH="$PREFIX/bin:$PATH"
+
+# miracle-* 程序可能来自：用户自建（~/.local）、deb 系统安装（$ROOT/bin）、源码构建产物
+BIN_DIRS=("$PREFIX/bin" "$ROOT/bin" "/usr/lib/harmony-mirror/bin" "/usr/local/bin")
+find_miracle_dir() {
+    for d in "${BIN_DIRS[@]}"; do
+        [ -x "$d/miracle-wifid" ] && [ -x "$d/miracle-sinkctl" ] && { printf '%s\n' "$d"; return 0; }
+    done
+    return 1
+}
+MIRACLE_DIR="$(find_miracle_dir || true)"
+# 子进程（miracle-dhcp / miracle-gst / uibc-viewer）按 PATH 查找，必须把这些目录都带上
+RUN_PATH="$MIRACLE_DIR:$PREFIX/bin:$ROOT/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export PATH="$RUN_PATH"
 
 IFACE="${IFACE:-$(ls /sys/class/net 2>/dev/null | grep -E '^wl' | head -1)}"
 AUDIO="${AUDIO:-1}"
@@ -36,9 +50,9 @@ c()  { printf '\033[1;36m[miracast]\033[0m %s\n' "$*"; }
 w()  { printf '\033[1;33m[miracast]\033[0m %s\n' "$*"; }
 e()  { printf '\033[1;31m[miracast]\033[0m %s\n' "$*" >&2; }
 
-if [ ! -x "$PREFIX/bin/miracle-wifid" ] || [ ! -x "$PREFIX/bin/miracle-sinkctl" ]; then
-    e "找不到 $PREFIX/bin/miracle-{wifid,sinkctl}"
-    e "请先执行安装脚本：  $ROOT/install.sh"
+if [ -z "$MIRACLE_DIR" ]; then
+    e "找不到 miracle-wifid / miracle-sinkctl"
+    e "用户自建：$ROOT/install.sh    |    系统安装：sudo apt install ./harmony-mirror_*.deb"
     exit 1
 fi
 if [ -z "$IFACE" ]; then
@@ -50,9 +64,9 @@ fi
 if [ "${1:-}" = "--check" ]; then
     c "只检查模式（不会改动任何东西）"
     ok=1
-    [ -x "$PREFIX/bin/miracle-wifid" ]   && c "miracle-wifid   ✓ $PREFIX/bin" || { e "缺 miracle-wifid"; ok=0; }
-    [ -x "$PREFIX/bin/miracle-sinkctl" ] && c "miracle-sinkctl ✓ $PREFIX/bin" || { e "缺 miracle-sinkctl"; ok=0; }
-    [ -x "$PREFIX/bin/miracle-dhcp" ]    && c "miracle-dhcp    ✓（手机靠它拿 IP）" || { w "缺 miracle-dhcp，手机可能拿不到 IP"; }
+    c "miracle 目录    ✓ $MIRACLE_DIR"
+    [ -x "$MIRACLE_DIR/miracle-sinkctl" ] && c "miracle-sinkctl ✓" || { e "缺 miracle-sinkctl"; ok=0; }
+    [ -x "$MIRACLE_DIR/miracle-dhcp" ]    && c "miracle-dhcp    ✓（手机靠它拿 IP）" || { w "缺 miracle-dhcp，手机可能拿不到 IP"; }
     if [ -f /etc/dbus-1/system.d/org.freedesktop.miracle.conf ]; then
         c "D-Bus 策略      ✓ /etc/dbus-1/system.d/"
     else
@@ -78,7 +92,10 @@ if [ "${1:-}" = "--check" ]; then
     exit $((1-ok))
 fi
 
-mkdir -p "$LOGDIR"
+mkdir -p "$LOGDIR" 2>/dev/null || {
+    LOGDIR="${XDG_CACHE_HOME:-$HOME/.cache}/harmony-mirror/miracast-$STAMP"
+    mkdir -p "$LOGDIR"
+}
 UFW_WAS_ACTIVE=0
 WIFID_PID=""
 
@@ -181,14 +198,13 @@ sleep 2
 # 关键：wifid 用 PATH 查找它要拉起的子进程 miracle-dhcp（DHCP 服务器，
 # 手机靠它拿 IP），而 sudo 默认会重置 PATH 为 secure_path（不含 ~/.local/bin），
 # 所以必须用 sudo env 显式把 PATH 传进去，否则 DHCP 起不来。
-RUN_PATH="$PREFIX/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 WIFID_ARGS=(--log-level debug)
 [ -n "$GO_INTENT" ] && WIFID_ARGS+=(--go-intent "$GO_INTENT")
 [ "$USE_DEV" = "1" ] && WIFID_ARGS+=(--use-dev)
 WIFID_ARGS+=(-i "$IFACE")
 
 c "启动 miracle-wifid ${WIFID_ARGS[*]}"
-sudo env "PATH=$RUN_PATH" "$PREFIX/bin/miracle-wifid" "${WIFID_ARGS[@]}" \
+sudo env "PATH=$RUN_PATH" "$MIRACLE_DIR/miracle-wifid" "${WIFID_ARGS[@]}" \
     >"$LOGDIR/wifid.log" 2>&1 &
 WIFID_PID=$!
 sleep 4
@@ -257,6 +273,6 @@ sudo env \
     "XAUTHORITY=${XAUTHORITY:-$HOME/.Xauthority}" \
     "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
     "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}" \
-    "$PREFIX/bin/miracle-sinkctl" "${SINK_ARGS[@]}" 2>&1 | tee "$LOGDIR/sinkctl.log"
+    "$MIRACLE_DIR/miracle-sinkctl" "${SINK_ARGS[@]}" 2>&1 | tee "$LOGDIR/sinkctl.log"
 
 # 正常退出会走到 trap -> restore

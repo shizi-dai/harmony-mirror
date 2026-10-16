@@ -47,6 +47,28 @@ Setting pipeline to PLAYING ...
 
 ## 快速开始
 
+### 方式一：直接安装二进制包（推荐，**无需编译**）
+
+从 [Releases](../../releases) 下载 `.deb`（内含预编译好的 MiracleCast 与 hdc）：
+
+```bash
+sudo apt install ./harmony-mirror_1.0.0_amd64.deb
+harmony-mirror-doctor          # 体检
+harmony-mirror                 # 方案 A：hdc 投屏 + 控制
+harmony-mirror-miracast        # 方案 B：Miracast 无线投屏
+```
+
+依赖由 apt 自动拉取（GStreamer 播放插件等），**不涉及任何编译**。
+非 Debian 系可用便携包（解压即用，方案 A 开箱可用）：
+
+```bash
+tar xzf harmony-mirror-1.0.0-linux-x86_64.tar.gz && cd harmony-mirror-1.0.0-linux-x86_64
+./scripts/doctor.sh
+./install-deps.sh              # 仅当要用方案 B（Miracast）时才需要
+```
+
+### 方式二：从源码（开发 / 想自己构建二进制包）
+
 ```bash
 git clone https://github.com/<你的账号>/harmony-mirror.git && cd harmony-mirror
 
@@ -77,7 +99,7 @@ git clone https://github.com/<你的账号>/harmony-mirror.git && cd harmony-mir
 
 ```
 harmony-mirror/
-├── install.sh                       方案 B 的一键安装（依赖 + MiracleCast + D-Bus 策略）
+├── install.sh                       从源码装机：依赖 + 编译 MiracleCast + D-Bus 策略
 ├── scripts/
 │   ├── doctor.sh                    环境体检（强烈建议先跑）
 │   ├── start-hdc-mirror.sh          方案 A 启动器（记住上次无线地址）
@@ -85,12 +107,14 @@ harmony-mirror/
 │   ├── run-miracast-sink.sh         方案 B：一键接收端（自动处理断网/防火墙/X 授权）
 │   ├── setup-hdc.sh                 重新获取 hdc（内置的那个被删时用）
 │   └── fix-usb-permission.sh        修 USB 权限（一次性，需 sudo）
+├── packaging/build-deb.sh           打包成 .deb / 便携 tarball（含预编译二进制）
 ├── vendor/openharmony-toolchains/   内置 hdc 3.2.0c + libusb_shared.so（来源见 PROVENANCE.md）
 └── docs/
     ├── 01-why-not-scrcpy.md         为什么 scrcpy 用不了、鸿蒙投屏的三条协议
     ├── 02-hdc-mirror.md             方案 A 原理、参数、调优、手工复现
     ├── 03-miracast-sink.md          方案 B 原理、依赖、四个坑、排错
-    └── 04-troubleshooting.md        常见问题速查
+    ├── 04-troubleshooting.md        常见问题速查
+    └── 05-packaging.md              二进制分发：装 deb、自己打包、发 Release
 ```
 
 ---

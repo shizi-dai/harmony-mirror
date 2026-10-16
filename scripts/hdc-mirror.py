@@ -71,8 +71,8 @@ QUALITY_SCALE = {
 
 def find_hdc():
     """定位 hdc 可执行文件（优先项目内置的，其次环境变量与系统 PATH）。"""
-    here = os.path.dirname(os.path.abspath(__file__))
-    root = os.path.dirname(here)                     # 项目根目录
+    here = os.path.dirname(os.path.realpath(__file__))   # realpath: 兼容软链调用
+    root = os.environ.get("HARMONY_MIRROR_ROOT") or os.path.dirname(here)
     cands = [
         os.environ.get("HDC_BIN"),
         os.path.join(root, "vendor", "openharmony-toolchains", "hdc"),
@@ -148,9 +148,15 @@ class HdcMirror:
                     sys.stderr.write("hdc tconn 输出：%s\n" % out.strip())
         r = subprocess.run(self._base() + ["list", "targets"],
                            capture_output=True, text=True, timeout=20)
-        lines = [l for l in (r.stdout or "").splitlines() if l.strip()]
+        # 注意：没有设备时 hdc 会打印 "[Empty]"，不能当成设备行
+        lines = [l for l in (r.stdout or "").splitlines()
+                 if l.strip() and "[Empty]" not in l]
         if not lines:
-            raise SystemExit("没有可用的 hdc 设备：请确认手机已开启调试并在手机上点了「允许」。")
+            raise SystemExit(
+                "没有可用的 hdc 设备。请检查：\n"
+                "  1) 手机已开启「USB调试」并点了「允许」\n"
+                "  2) 无线调试的话端口是否变了（手机上重新查看）\n"
+                "  然后重试： hdc tconn <IP:端口>")
         if "Unauthorized" in lines[0]:
             raise SystemExit("设备未授权：请在手机弹出的提示中点击「允许」。")
         return lines[0]
@@ -184,6 +190,7 @@ class HdcMirror:
                 self.native_w, self.native_h = im.size
         except Exception:
             self.native_w, self.native_h = 1224, 2776
+            sys.stderr.write("警告：无法读取屏幕分辨率，暂用 1224x2776 兜底\n")
 
     def _capture_size(self):
         """当前画质档位对应的设备端抓取尺寸（宽高取偶数，避免编码告警）。"""

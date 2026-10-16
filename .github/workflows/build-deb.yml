@@ -1,0 +1,52 @@
+name: build-packages
+
+# 打 tag（v1.0.0 这种）时自动构建 .deb 与便携包，并附加到 Release。
+# 也可在 Actions 页面手动触发（workflow_dispatch）。
+#
+# 说明：这里特意用 ubuntu-24.04 runner —— 在较老的系统上构建，
+# 产物的 glibc 要求更低，兼容的发行版范围反而更大。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装编译与打包依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            meson ninja-build libsystemd-dev libudev-dev libglib2.0-dev \
+            libreadline-dev gstreamer1.0-plugins-bad gstreamer1.0-libav fakeroot git
+
+      - name: 编译 MiracleCast（产出 ~/.local/bin/miracle-*）
+        run: ./install.sh
+
+      - name: 打包 .deb 与便携 tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -n "$VERSION" ] || VERSION="0.0.0-dev"
+          VERSION="$VERSION" ./packaging/build-deb.sh
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmony-mirror-packages
+          path: dist/*
+
+      - name: 附加到 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.deb
+            dist/*.tar.gz
+          generate_release_notes: true

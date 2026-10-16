@@ -14,9 +14,13 @@
 # ============================================================================
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(dirname "$HERE")"
+# 解析符号链接，兼容「系统安装 + /usr/bin 软链」的调用方式
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+ROOT="${HARMONY_MIRROR_ROOT:-$(dirname "$HERE")}"
 STATE_DIR="$ROOT/state"
+# 系统安装（/usr/lib/...）时普通用户写不了，退回用户缓存目录
+mkdir -p "$STATE_DIR" 2>/dev/null || STATE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/harmony-mirror"
 mkdir -p "$STATE_DIR"
 
 export HDC_BIN="${HDC_BIN:-$ROOT/vendor/openharmony-toolchains/hdc}"
